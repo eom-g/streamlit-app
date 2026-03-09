@@ -4,6 +4,6 @@ numpy
 plotly
 google-generativeai
 optbinning
-ydata-profiling==4.6.4
+ydata-profiling
 sweetviz
-setuptools==69.5.1
+setuptools

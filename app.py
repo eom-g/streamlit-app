@@ -1,3 +1,13 @@
+import os
+import subprocess
+import sys
+
+# 1. pkg_resources 에러 강제 해결
+try:
+    import pkg_resources
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "setuptools"])
+
 import streamlit as st
 import pandas as pd
 import numpy as np

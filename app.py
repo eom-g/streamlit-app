@@ -6,147 +6,128 @@ import google.generativeai as genai
 from optbinning import OptimalBinning
 import streamlit.components.v1 as components
 
-# 1. 의존성 에러 방지용 가드
+# 1. 의존성 가드
 try:
     from ydata_profiling import ProfileReport
-except (ImportError, AttributeError):
+except:
     ProfileReport = None
 
-# 페이지 설정
-st.set_page_config(page_title="통신 고객 라이프스타일 상세 분석", layout="wide")
+st.set_page_config(page_title="가설 기반 통신 데이터 분석", layout="wide")
 
-# --- 2. 확장된 통신 샘플 데이터 생성 함수 ---
+# --- 2. 데이터 생성 로직 (동일) ---
 @st.cache_data
 def load_telco_data():
     np.random.seed(42)
-    n_rows = 200
-    
-    # 카테고리 정의
-    membership_types = ['Bronze', 'Silver', 'Gold', 'VIP']
-    combined_options = ['미결합', '유무선결합', '무무선결합(가족)']
-    
-    # 기본 정보 생성
+    n_rows = 300
     data = {
         '고객ID': range(1001, 1001 + n_rows),
         '나이': np.random.randint(18, 75, n_rows),
-        '성별': np.random.choice(['남', '여'], n_rows),
-        
-        # 1. 웹앱 카테고리별 접속 건수 (한 달 기준)
         '접속_온라인쇼핑': np.random.randint(5, 100, n_rows),
         '접속_음악스트리밍': np.random.randint(10, 200, n_rows),
         '접속_OTT영상': np.random.randint(5, 150, n_rows),
         '접속_SNS': np.random.randint(20, 300, n_rows),
         '접속_금융재테크': np.random.randint(2, 80, n_rows),
-        
-        # 2. 사용량 및 단말 정보
         '월_데이터사용량_GB': np.random.uniform(2, 120, n_rows),
-        '월_평균사용시간_시간': np.random.uniform(20, 300, n_rows),
         '단말사용기간_개월': np.random.randint(1, 60, n_rows),
-        
-        # 3. 멤버십 및 혜택
-        '멤버십등급': np.random.choice(membership_types, n_rows),
-        '멤버십_혜택사용건수': np.random.randint(0, 20, n_rows),
-        '멤버십_실사용금액': np.random.randint(0, 100000, n_rows),
-        
-        # 4. 결합 정보
-        '결합유형': np.random.choice(combined_options, n_rows),
-        '가족결합_혜택이용여부': np.random.choice(['Y', 'N'], n_rows, p=[0.45, 0.55]),
-        
-        # 타겟 변수 (이탈 예측용 샘플)
+        '결합유형': np.random.choice(['미결합', '유무선결합', '무무선결합(가족)'], n_rows),
+        '가족결합_혜택이용여부': np.random.choice(['Y', 'N'], n_rows),
         '이탈여부': np.random.choice([0, 1], n_rows, p=[0.8, 0.2])
     }
-    
-    df = pd.DataFrame(data)
-    
-    # 주 사용 카테고리 계산 (접속 건수가 가장 많은 곳)
-    visit_cols = ['접속_온라인쇼핑', '접속_음악스트리밍', '접속_OTT영상', '접속_SNS', '접속_금융재테크']
-    df['주사용_카테고리'] = df[visit_cols].idxmax(axis=1).str.replace('접속_', '')
-    
-    return df
+    return pd.DataFrame(data)
+
+# --- 3. 가설 키워드 매핑 함수 ---
+def get_related_columns(hypothesis):
+    # 가설에 포함된 키워드에 따라 관련 컬럼 반환
+    mapping = {
+        '쇼핑': ['접속_온라인쇼핑'],
+        '음악': ['접속_음악스트리밍'],
+        '영상': ['접속_OTT영상', '접속_SNS'],
+        'OTT': ['접속_OTT영상'],
+        '금융': ['접속_금융재테크'],
+        '데이터': ['월_데이터사용량_GB'],
+        '결합': ['결합유형', '가족결합_혜택이용여부'],
+        '단말': ['단말사용기간_개월'],
+        '이탈': ['이탈여부']
+    }
+    related = ['고객ID'] # 기본값
+    for key, cols in mapping.items():
+        if key in hypothesis:
+            related.extend(cols)
+    return list(set(related))
 
 def main():
-    st.title("📱 통신 고객 라이프스타일 및 결합 혜택 정밀 분석")
-    
-    # 데이터 로드
+    st.title("🧪 통신 고객 가설 검증 샌드박스")
     df = load_telco_data()
+
+    # 사이드바에서 가설 입력
+    st.sidebar.header("1. 가설 설정")
+    user_hypothesis = st.sidebar.text_area(
+        "검증하고 싶은 가설을 입력하세요:",
+        placeholder="예: OTT 사용량이 많은 고객은 결합 상품 이용률이 높을 것이다."
+    )
     
-    st.sidebar.success("상세 샘플 데이터 로드 완료")
-    st.sidebar.info(f"데이터 총량: {df.shape[0]}명 고객")
+    analyze_button = st.sidebar.button("가설 검증 시작")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 데이터 현황", "🔍 카테고리별 EDA", "📈 구간 최적화", "🤖 AI 마케팅"])
+    if analyze_button and user_hypothesis:
+        # 가설 관련 변수 추출
+        relevant_cols = get_related_columns(user_hypothesis)
+        
+        # 만약 매칭되는 키워드가 없으면 전체 보여주기 방지용
+        if len(relevant_cols) <= 1:
+             relevant_cols = df.columns.tolist()
+             st.warning("⚠️ 명확한 분석 키워드를 찾지 못해 전체 데이터를 로드합니다.")
 
-    # --- Tab 1: 데이터 미리보기 ---
-    with tab1:
-        st.subheader("고객별 상세 라이프스타일 데이터")
-        st.dataframe(df.head(10))
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("**카테고리별 평균 접속 건수**")
-            visit_cols = ['접속_온라인쇼핑', '접속_음악스트리밍', '접속_OTT영상', '접속_SNS', '접속_금융재테크']
-            st.bar_chart(df[visit_cols].mean())
-        with col2:
-            st.write("**결합 유형별 분포**")
-            st.write(df['결합유형'].value_counts())
+        filtered_df = df[relevant_cols]
 
-    # --- Tab 2: YData Profiling ---
-    with tab2:
-        st.subheader("데이터 상세 프로파일링 리포트")
-        if st.button("EDA 리포트 생성"):
-            if ProfileReport is not None:
-                with st.spinner("다차원 리포트를 생성 중입니다..."):
-                    pr = ProfileReport(df, explorative=True, minimal=True)
-                    components.html(pr.to_html(), height=800, scrolling=True)
-            else:
-                st.error("리포트 생성 라이브러리가 로드되지 않았습니다.")
+        st.success(f"✔️ 입력하신 가설: {user_hypothesis}")
+        st.info(f"🔍 가설과 관련된 주요 변수: {', '.join([c for c in relevant_cols if c != '고객ID'])}")
 
-    # --- Tab 3: OptBinning (금융재테크 접속 vs 이탈) ---
-    with tab3:
-        st.subheader("구간 최적화: 금융/재테크 접속 건수 분석")
-        st.write("금융 앱 접속 빈도와 고객 유지율 간의 상관관계를 최적의 구간으로 나눕니다.")
-        
-        x = df['접속_금융재테크'].values
-        y = df['이탈여부'].values
-        
-        optb = OptimalBinning(name="finance_visits", dtype="numerical", solver="cp")
-        optb.fit(x, y)
-        
-        st.write("**Optimal Binning Table**")
-        st.dataframe(optb.binning_table.build())
-        
-        # WOE 그래프
-        fig = px.bar(optb.binning_table.build()[:-1], x='Bin', y='WoE', title="금융 앱 접속 구간별 WoE 지표")
-        st.plotly_chart(fig)
+        tab1, tab2, tab3 = st.tabs(["📊 관련 데이터 추출", "📈 변수 상관관계", "💡 AI 가설 평가"])
 
-    # --- Tab 4: Gemini AI 마케팅 전략 ---
-    with tab4:
-        st.subheader("AI 맞춤형 고객 인사이트")
-        api_key = st.text_input("Gemini API Key", type="password")
-        
-        if st.button("분석 결과 기반 마케팅 제안"):
-            if not api_key:
-                st.warning("API 키를 입력하세요.")
-            else:
-                try:
+        with tab1:
+            st.subheader("가설 관련 데이터 뷰")
+            st.dataframe(filtered_df.head(20))
+            st.write(f"추출된 변수 개수: {len(relevant_cols)-1}개")
+
+        with tab2:
+            st.subheader("주요 변수 시각화")
+            if len(relevant_cols) > 2:
+                # 첫 번째 수치형 변수와 이탈여부 또는 나이의 관계 시각화
+                num_cols = filtered_df.select_dtypes(include=[np.number]).columns.tolist()
+                num_cols = [c for c in num_cols if c != '고객ID']
+                
+                if len(num_cols) >= 2:
+                    fig = px.scatter(filtered_df, x=num_cols[0], y=num_cols[1], 
+                                     color='결합유형' if '결합유형' in filtered_df.columns else None,
+                                     title=f"{num_cols[0]}와 {num_cols[1]}의 관계")
+                    st.plotly_chart(fig)
+                else:
+                    st.write("시각화를 위해 더 많은 키워드를 입력해주세요.")
+
+        with tab3:
+            st.subheader("Gemini AI 가설 검증 리포트")
+            api_key = st.text_input("Gemini API Key", type="password")
+            if st.button("AI 검증 리포트 생성"):
+                if api_key:
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-pro')
                     
-                    # AI에게 줄 데이터 요약
-                    top_cat_dist = df['주사용_카테고리'].value_counts().to_dict()
-                    combined_dist = df['결합유형'].value_counts().to_dict()
-                    
+                    data_summary = filtered_df.describe().to_string()
                     prompt = f"""
-                    다음 통신사 고객 데이터를 분석해줘:
-                    1. 주사용 서비스 분포: {top_cat_dist}
-                    2. 결합 상태: {combined_dist}
-                    3. 가족결합 혜택 사용 여부: {df['가족결합_혜택이용여부'].value_counts().to_dict()}
+                    입력된 가설: {user_hypothesis}
+                    관련 데이터 요약:
+                    {data_summary}
                     
-                    위 데이터를 바탕으로 'OTT 주사용자'를 '유무선 결합 상품'으로 유도하기 위한 구체적인 마케팅 문구와 전략을 한국어로 3가지 작성해줘.
+                    위 데이터를 바탕으로 이 가설이 타당한지 분석하고, 통신사 입장에서 어떤 마케팅 액션을 취해야 할지 한국어로 요약해줘.
                     """
-                    response = model.generate_content(prompt)
-                    st.info(response.text)
-                except Exception as e:
-                    st.error(f"에러 발생: {e}")
+                    with st.spinner("AI가 데이터를 분석 중입니다..."):
+                        response = model.generate_content(prompt)
+                        st.markdown(response.text)
+                else:
+                    st.warning("API 키를 입력해주세요.")
+    
+    elif not analyze_button:
+        st.info("👈 왼쪽 사이드바에 분석하고 싶은 가설을 입력하고 버튼을 눌러주세요.")
 
 if __name__ == "__main__":
     main()

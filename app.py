@@ -1,22 +1,11 @@
 import streamlit as st
-import sys
+import os
 
-# pkg_resources 에러 강제 방어
+# 1. 의존성 경로 패치 (pkg_resources 에러 방지)
 try:
     import pkg_resources
 except ImportError:
     import setuptools.pkg_resources as pkg_resources
-
-# 라이브러리 로드 가드
-try:
-    import sweetviz as sv
-except Exception:
-    sv = None
-
-try:
-    from ydata_profiling import ProfileReport
-except Exception:
-    ProfileReport = None
 
 import pandas as pd
 import numpy as np
@@ -25,11 +14,22 @@ import google.generativeai as genai
 from optbinning import OptimalBinning
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Awesome EDA", layout="wide")
+# EDA 라이브러리는 에러가 나더라도 앱이 죽지 않게 로드
+try:
+    import sweetviz as sv
+except:
+    sv = None
 
-# (이하 데이터 생성 및 메인 로직 코드...)
-st.title("📱 통신 고객 가설 검증 샌드박스")
-st.info("파이썬 3.10 환경으로 배포를 시도 중입니다.")
+try:
+    from ydata_profiling import ProfileReport
+except:
+    ProfileReport = None
+
+st.set_page_config(page_title="Awesome EDA - 통신 데이터 분석", layout="wide")
+
+# (이하 기존의 통신 데이터 생성 및 가설 분석 로직 동일)
+st.title("📱 통신 고객 라이프스타일 가설 검증")
+st.info("안정적인 분석 환경(Python 3.10)을 구축 중입니다.")
 
 if sv is None or ProfileReport is None:
     st.error("⚠️ EDA 라이브러리 로드에 문제가 있습니다. 하지만 기본 분석은 가능합니다.")

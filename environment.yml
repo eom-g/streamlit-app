@@ -4,7 +4,7 @@ channels:
   - defaults
 dependencies:
   - python=3.10
-  - setuptools  # <--- pip 밖, conda 기본 의존성에 배치 (핵심!)
+  - setuptools  # <--- pip 밖, conda 기본 의존성에 배치하여 시스템 경로 문제를 해결합니다.
   - pip
   - pip:
     - streamlit

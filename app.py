@@ -66,4 +66,37 @@ def main():
             with st.spinner("Sweetviz가 두 그룹의 차이를 계산 중입니다..."):
                 # Sweetviz 비교 분석 실행
                 report = sv.compare([group_a, group_a_val], [group_b, group_b_val], target_feat='이탈여부')
-                report.show_html(filepath='compare_report.html
+                report.show_html(filepath='compare_report.html', open_browser=False)
+                
+                with open('compare_report.html', 'r', encoding='utf-8') as f:
+                    components.html(f.read(), height=1000, scrolling=True)
+
+    with tab2:
+        st.subheader("📋 전체 데이터 프로파일링")
+        st.write("분석가가 모델링 전 데이터 품질과 분포를 확인하는 용도입니다.")
+        
+        if st.button("상세 리포트 생성"):
+            with st.spinner("YData-Profiling 실행 중..."):
+                profile = ProfileReport(df, explorative=True, minimal=True)
+                components.html(profile.to_html(), height=1000, scrolling=True)
+
+    with tab3:
+        st.subheader("📉 Optimal Binning (WoE 분석)")
+        num_col = st.selectbox("분석할 연속형 변수 선택:", ["나이", "데이터사용량_GB", "월평균매출_ARPU"])
+        
+        if st.button("IV/WoE 산출"):
+            optb = OptimalBinning(name=num_col, dtype="numerical", solver="cp")
+            optb.fit(df[num_col].values, df['이탈여부'].values)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("**Binning Table**")
+                st.dataframe(optb.binning_table.build())
+            with col2:
+                st.write("**WoE Visualization**")
+                res_df = optb.binning_table.build()[:-1]
+                fig = px.bar(res_df, x='Bin', y='WoE', text_auto='.2f')
+                st.plotly_chart(fig, use_container_width=True)
+
+if __name__ == "__main__":
+    main()

@@ -3,14 +3,14 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10
+  - python=3.9
   - pip
   - setuptools
   - pip:
       - streamlit
       - pandas<2.0.0
       - numpy<2.0.0
-      - ydata-profiling==4.6.4
+      - ydata-profiling==4.1.2
       - sweetviz
       - plotly
       - google-generativeai

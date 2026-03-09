@@ -13,35 +13,37 @@ import os
 st.set_page_config(page_title="통신 고객 가설 검증 AI 샌드박스", layout="wide")
 
 def get_gemini_insight(prompt, data_summary, user_api_key):
-    # 사이드바 입력 키 우선, 없으면 Secrets 확인
     api_key = user_api_key if user_api_key else st.secrets.get("GEMINI_API_KEY")
     
     if not api_key:
-        return "⚠️ API Key가 필요합니다. 사이드바에 입력하거나 Streamlit Secrets에 등록해주세요."
+        return "⚠️ API Key가 필요합니다. 사이드바에 입력해주세요."
     
     try:
         genai.configure(api_key=api_key)
-        # 안정적인 1.5-flash 모델 사용 (속도 및 비용 최적화)
-        model = genai.GenerativeModel('gemini-pro')
+        
+        # [핵심 수정] 사용 가능한 모델 목록을 가져와서 적절한 모델 자동 선택
+        available_models = [m.name for m in genai.list_models() 
+                            if 'generateContent' in m.supported_generation_methods]
+        
+        if not available_models:
+            return "❌ 현재 API 키로 사용 가능한 생성 모델이 없습니다."
+        
+        # 가장 성능이 좋은 최신 모델(보통 목록의 상단) 자동 선택
+        # 'models/gemini-1.5-flash' 혹은 'models/gemini-pro' 등이 자동 할당됨
+        selected_model = available_models[0] 
+        model = genai.GenerativeModel(selected_model)
         
         full_prompt = f"""
-        당신은 통신사 데이터 기반 마케팅 전략가입니다.
-        
-        [분석 데이터 요약]
-        {data_summary}
-        
-        [사용자 분석 가설]
-        {prompt}
-        
-        위 데이터를 바탕으로 가설의 타당성을 평가하고, 사업팀이 즉시 실행할 수 있는 전략적 제언(Action Item)을 3가지 포인트로 요약하세요. 
-        데이터에 근거하여 구체적인 수치를 언급하면 더 좋습니다.
+        당신은 통신사 데이터 마케팅 전문가입니다.
+        데이터 요약: {data_summary}
+        가설: {prompt}
+        가설 검증 결과와 사업적 제언을 3줄 요약하세요.
         """
         response = model.generate_content(full_prompt)
         return response.text
+        
     except Exception as e:
-        if "API_KEY_INVALID" in str(e):
-            return "❌ API Key가 유효하지 않습니다. 다시 확인해주세요."
-        return f"❌ AI 요약 중 오류 발생: {str(e)}"
+        return f"❌ AI 엔진 연결 실패: {str(e)}"
 
 # --- 2. 가상 데이터 생성 (사업팀 디멘젼 반영) ---
 @st.cache_data

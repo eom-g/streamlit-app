@@ -6,12 +6,12 @@ dependencies:
   - python=3.9
   - pip
   - setuptools
+  - numpy<2.0.0
+  - pandas<2.0.0
   - pip:
       - streamlit
-      - pandas<2.0.0
-      - numpy<2.0.0
       - ydata-profiling==4.1.2
-      - sweetviz
+      - sweetviz==2.3.1  # 버전을 명시해줍니다.
       - plotly
       - google-generativeai
       - optbinning

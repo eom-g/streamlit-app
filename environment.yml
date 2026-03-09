@@ -1,17 +1,15 @@
 name: streamlit-app
 channels:
   - conda-forge
-  - defaults
 dependencies:
-  - python=3.11
+  - python=3.10  # 3.11보다 더 안정적인 3.10으로 내려서 시도해봅시다.
   - pip
   - pip:
     - streamlit
+    - ydata-profiling==4.6.4  # 검증된 안정 버전
     - pandas
     - numpy
     - plotly
     - google-generativeai
     - optbinning
     - sweetviz
-    - ydata-profiling
-    - setuptools

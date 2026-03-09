@@ -8,10 +8,29 @@ import streamlit.components.v1 as components
 import sweetviz as sv
 from ydata_profiling import ProfileReport
 
-# --- 1. 페이지 설정 ---
-st.set_page_config(page_title="통신 세그먼트 분석 자동화", layout="wide")
+# --- 1. 페이지 설정 및 Gemini 설정 ---
+st.set_page_config(page_title="통신 가설 검증 AI 샌드박스", layout="wide")
 
-# --- 2. 데이터 생성 (사업팀 요청 시나리오 반영) ---
+def get_gemini_insight(prompt, data_summary, api_key):
+    if not api_key:
+        return "⚠️ Gemini API Key를 입력하면 AI 인사이트를 볼 수 있습니다."
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-pro')
+        full_prompt = f"""
+        당신은 통신사 전문 데이터 분석가입니다. 
+        사용자의 가설: {prompt}
+        데이터 요약 통계: {data_summary}
+        
+        위 데이터를 바탕으로 가설을 검증하고, 사업팀이 즉시 실행 가능한 마케팅 인사이트를 3줄로 요약하세요.
+        말투는 정중하고 전문적인 비즈니스 문체를 사용하세요.
+        """
+        response = model.generate_content(full_prompt)
+        return response.text
+    except Exception as e:
+        return f"❌ AI 요약 중 오류 발생: {e}"
+
+# --- 2. 데이터 로드 (기존 동일) ---
 @st.cache_data
 def load_data():
     np.random.seed(42)
@@ -26,77 +45,62 @@ def load_data():
         '월평균매출_ARPU': np.random.uniform(30000, 100000, n_rows),
         '이탈여부': np.random.choice([0, 1], n_rows, p=[0.85, 0.15])
     }
-    # 시나리오 기반 상관관계 주입 (SIM-only가 데이터 사용량이 더 많도록 설정)
     df = pd.DataFrame(data)
     df.loc[df['약정유형'] == 'SIM-only', '데이터사용량_GB'] += 20
     return df
 
-# --- 3. 메인 로직 ---
+# --- 3. 메인 UI ---
 def main():
-    st.title("📊 통신 고객 세그먼트 비교 분석 자동화")
-    st.markdown("사업팀 요청 EDA 및 분석가용 기술 통계를 자동으로 생성합니다.")
-
+    st.title("🧪 통신 고객 가설 검증 AI 샌드박스")
     df = load_data()
 
-    # 사이드바: 분석 그룹 설정
-    st.sidebar.header("🔍 비교 세그먼트 설정")
-    
-    # 분석 차원 선택
-    dimension = st.sidebar.selectbox("비교할 디멘젼 선택:", ["약정유형", "요금제레벨", "단말유형"])
-    
-    # 그룹 A/B 필터링
-    unique_vals = df[dimension].unique().tolist()
-    group_a_val = st.sidebar.selectbox(f"그룹 A ({dimension}):", unique_vals, index=0)
-    group_b_val = st.sidebar.selectbox(f"그룹 B ({dimension}):", unique_vals, index=min(1, len(unique_vals)-1))
+    # 사이드바: 모드 선택
+    st.sidebar.header("🛠️ 분석 모드 선택")
+    mode = st.sidebar.radio("모드를 선택하세요:", ["자연어 가설 분석", "세그먼트 1:1 비교"])
+    api_key = st.sidebar.text_input("Gemini API Key", type="password")
 
-    st.sidebar.divider()
-    api_key = st.sidebar.text_input("Gemini API Key (선택)", type="password")
-    
-    # 탭 구성
-    tab1, tab2, tab3 = st.tabs(["🎯 세그먼트 비교 (Sweetviz)", "📈 데이터 상세 (YData)", "🛠️ 변수 최적화 (OptBinning)"])
-
-    group_a = df[df[dimension] == group_a_val]
-    group_b = df[df[dimension] == group_b_val]
-
-    with tab1:
-        st.subheader(f"✅ {group_a_val} vs {group_b_val} 특성 비교")
-        st.write("사업팀이 정의한 두 그룹의 모든 디멘젼 차이를 자동으로 분석합니다.")
+    if mode == "자연어 가설 분석":
+        st.subheader("💡 가설 기반 자동 분석")
+        user_hypothesis = st.text_area("검증하고 싶은 가설을 입력하세요:", 
+                                     placeholder="예: 20대 아이폰 유저는 고가 요금제 사용 비중이 높고 이탈률이 낮을 것이다.")
         
-        if st.button("실시간 비교 리포트 생성"):
-            with st.spinner("Sweetviz가 두 그룹의 차이를 계산 중입니다..."):
-                # Sweetviz 비교 분석 실행
-                report = sv.compare([group_a, group_a_val], [group_b, group_b_val], target_feat='이탈여부')
-                report.show_html(filepath='compare_report.html', open_browser=False)
-                
-                with open('compare_report.html', 'r', encoding='utf-8') as f:
-                    components.html(f.read(), height=1000, scrolling=True)
-
-    with tab2:
-        st.subheader("📋 전체 데이터 프로파일링")
-        st.write("분석가가 모델링 전 데이터 품질과 분포를 확인하는 용도입니다.")
-        
-        if st.button("상세 리포트 생성"):
-            with st.spinner("YData-Profiling 실행 중..."):
-                profile = ProfileReport(df, explorative=True, minimal=True)
-                components.html(profile.to_html(), height=1000, scrolling=True)
-
-    with tab3:
-        st.subheader("📉 Optimal Binning (WoE 분석)")
-        num_col = st.selectbox("분석할 연속형 변수 선택:", ["나이", "데이터사용량_GB", "월평균매출_ARPU"])
-        
-        if st.button("IV/WoE 산출"):
-            optb = OptimalBinning(name=num_col, dtype="numerical", solver="cp")
-            optb.fit(df[num_col].values, df['이탈여부'].values)
+        if st.button("가설 검증 시작"):
+            # 가설 관련 키워드로 데이터 필터링 시뮬레이션 (실제로는 더 복잡한 로직 가능)
+            st.info("🔍 LLM이 가설을 분석하여 관련 데이터를 추출 중입니다...")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("**Binning Table**")
-                st.dataframe(optb.binning_table.build())
-            with col2:
-                st.write("**WoE Visualization**")
-                res_df = optb.binning_table.build()[:-1]
-                fig = px.bar(res_df, x='Bin', y='WoE', text_auto='.2f')
-                st.plotly_chart(fig, use_container_width=True)
+            # (가설 검증을 위한 데이터 요약 생성)
+            summary_stats = df.describe().to_string()
+            
+            with st.expander("📝 AI 인사이트 요약", expanded=True):
+                insight = get_gemini_insight(user_hypothesis, summary_stats, api_key)
+                st.markdown(insight)
+
+            # 가설 관련 시각화 (예시: 나이대별 요금제 분포)
+            fig = px.histogram(df, x="나 age" if "나이" in user_hypothesis else "데이터사용량_GB", 
+                               color="요금제레벨", barmode="group", title="가설 관련 데이터 분포")
+            st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        # 기존 세그먼트 비교 로직 (Sweetviz 활용)
+        st.subheader("👥 세그먼트 1:1 대조 분석")
+        dimension = st.sidebar.selectbox("비교 디멘젼:", ["약정유형", "요금제레벨", "단말유형"])
+        vals = df[dimension].unique().tolist()
+        g_a = st.sidebar.selectbox("그룹 A", vals, index=0)
+        g_b = st.sidebar.selectbox("그룹 B", vals, index=1)
+
+        if st.button("비교 리포트 및 AI 요약 생성"):
+            report = sv.compare([df[df[dimension]==g_a], g_a], [df[df[dimension]==g_b], g_b], target_feat='이탈여부')
+            report.show_html('compare.html', open_browser=False)
+            
+            # AI 요약 (두 그룹의 평균 차이 전달)
+            diff_summary = f"그룹A({g_a}) 평균 ARPU: {df[df[dimension]==g_a]['월평균매출_ARPU'].mean():.0f}, 그룹B({g_b}) 평균 ARPU: {df[df[dimension]==g_b]['월평균매출_ARPU'].mean():.0f}"
+            
+            with st.expander("📝 AI 세그먼트 비교 요약", expanded=True):
+                insight = get_gemini_insight(f"{g_a}와 {g_b} 그룹 비교", diff_summary, api_key)
+                st.markdown(insight)
+            
+            with open('compare.html', 'r', encoding='utf-8') as f:
+                components.html(f.read(), height=1000, scrolling=True)
 
 if __name__ == "__main__":
     main()

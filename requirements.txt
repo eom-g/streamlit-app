@@ -1,9 +1,0 @@
-streamlit
-pandas
-numpy
-plotly
-google-generativeai
-optbinning
-ydata-profiling
-sweetviz
-setuptools

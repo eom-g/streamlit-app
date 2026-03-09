@@ -1,0 +1,9 @@
+streamlit
+pandas
+numpy
+plotly
+google-generativeai
+optbinning
+ydata-profiling==4.6.4
+sweetviz
+setuptools==69.5.1

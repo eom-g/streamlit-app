@@ -1,18 +1,13 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import google.generativeai as genai
-from optbinning import OptimalBinning
-import streamlit.components.v1 as components
+import sys
 
-# [강력 조치] pkg_resources 에러 방지를 위한 최상단 배치
+# pkg_resources 에러 강제 방어
 try:
     import pkg_resources
 except ImportError:
     import setuptools.pkg_resources as pkg_resources
 
-# 라이브러리 로드 (실패해도 앱은 돌아가게 처리)
+# 라이브러리 로드 가드
 try:
     import sweetviz as sv
 except Exception:
@@ -23,8 +18,21 @@ try:
 except Exception:
     ProfileReport = None
 
-# --- 데이터 생성 및 메인 로직 시작 ---
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import google.generativeai as genai
+from optbinning import OptimalBinning
+import streamlit.components.v1 as components
+
 st.set_page_config(page_title="Awesome EDA", layout="wide")
+
+# (이하 데이터 생성 및 메인 로직 코드...)
+st.title("📱 통신 고객 가설 검증 샌드박스")
+st.info("파이썬 3.10 환경으로 배포를 시도 중입니다.")
+
+if sv is None or ProfileReport is None:
+    st.error("⚠️ EDA 라이브러리 로드에 문제가 있습니다. 하지만 기본 분석은 가능합니다.")
 
 # --- 2. 데이터 생성 로직 (확장된 통신 데이터) ---
 @st.cache_data

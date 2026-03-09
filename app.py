@@ -1,16 +1,3 @@
-import sys
-import subprocess
-import os
-
-# 1. pkg_resources와 setuptools를 런타임에 강제로 설치 및 로드
-try:
-    import pkg_resources
-except ImportError:
-    # 현재 실행 중인 파이썬 엔진에 직접 명령하여 setuptools 설치
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "setuptools"])
-    import pkg_resources
-
-# 2. 필수 라이브러리 임포트 (에러 방지를 위한 예외 처리 포함)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,22 +6,25 @@ import google.generativeai as genai
 from optbinning import OptimalBinning
 import streamlit.components.v1 as components
 
-# Sweetviz와 YData-Profiling은 내부적으로 pkg_resources를 많이 쓰므로 
-# 위에서 강제 로드한 뒤에 임포트해야 합니다.
+# [강력 조치] pkg_resources 에러 방지를 위한 최상단 배치
+try:
+    import pkg_resources
+except ImportError:
+    import setuptools.pkg_resources as pkg_resources
+
+# 라이브러리 로드 (실패해도 앱은 돌아가게 처리)
 try:
     import sweetviz as sv
-except Exception as e:
-    st.error(f"Sweetviz 로드 실패: {e}")
+except Exception:
     sv = None
 
 try:
     from ydata_profiling import ProfileReport
-except Exception as e:
-    st.error(f"YData-Profiling 로드 실패: {e}")
+except Exception:
     ProfileReport = None
 
-# 페이지 설정
-st.set_page_config(page_title="Awesome EDA - Telco Lifestyle", layout="wide")
+# --- 데이터 생성 및 메인 로직 시작 ---
+st.set_page_config(page_title="Awesome EDA", layout="wide")
 
 # --- 2. 데이터 생성 로직 (확장된 통신 데이터) ---
 @st.cache_data

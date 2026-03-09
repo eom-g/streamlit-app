@@ -1,3 +1,17 @@
+import sys
+import os
+
+# 1. pkg_resources 모듈 강제 연결 (Sweetviz 전용 패치)
+try:
+    import pkg_resources
+except ImportError:
+    try:
+        from setuptools import pkg_resources
+    except ImportError:
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "setuptools"])
+        import pkg_resources
+
 import streamlit as st
 import pandas as pd
 import numpy as np

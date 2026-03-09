@@ -14,4 +14,4 @@ dependencies:
     - optbinning
     - sweetviz
     - ydata-profiling
-    - setuptools  # 이 줄을 추가해서 pkg_resources 문제를 해결합니다.
+    - setuptools

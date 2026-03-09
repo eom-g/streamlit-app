@@ -1,12 +1,26 @@
+import sys
+
+# 1. pkg_resources 에러 방지를 위한 런타임 패치
+try:
+    import pkg_resources
+except ImportError:
+    import pip
+    pip.main(['install', 'setuptools'])
+    import pkg_resources
+
+# 2. 만약 위 방법으로도 안될 경우를 대비한 가상 경로 설정
+if not hasattr(pkg_resources, 'resource_filename'):
+    import setuptools.pkg_resources as pkg_resources
+
+# --- 이제 기존 라이브러리를 불러옵니다 ---
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import google.generativeai as genai
 from optbinning import OptimalBinning
-import sweetviz as sv
+import sweetviz as sv  # 이제 에러 없이 로드될 것입니다.
 import streamlit.components.v1 as components
-import os
 
 # 1. 의존성 가드 (패키지 로드 확인)
 try:

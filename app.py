@@ -22,7 +22,7 @@ def get_gemini_insight(prompt, data_summary, user_api_key):
     try:
         genai.configure(api_key=api_key)
         # 안정적인 1.5-flash 모델 사용 (속도 및 비용 최적화)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-pro')
         
         full_prompt = f"""
         당신은 통신사 데이터 기반 마케팅 전략가입니다.

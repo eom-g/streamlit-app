@@ -1,0 +1,16 @@
+name: streamlit-app
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    - streamlit
+    - pandas
+    - numpy
+    - plotly
+    - google-generativeai
+    - optbinning
+    - sweetviz
+    - ydata-profiling

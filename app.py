@@ -1,32 +1,37 @@
 import sys
 import subprocess
+import os
 
-# 1. pkg_resources 에러를 물리적으로 해결하는 강제 설치 로직
+# 1. pkg_resources와 setuptools를 런타임에 강제로 설치 및 로드
 try:
     import pkg_resources
 except ImportError:
-    # pip를 이용해 setuptools를 현재 실행 중인 파이썬 환경에 강제 설치
+    # 현재 실행 중인 파이썬 엔진에 직접 명령하여 setuptools 설치
     subprocess.check_call([sys.executable, "-m", "pip", "install", "setuptools"])
     import pkg_resources
 
-# 2. 그 다음 기존 라이브러리들을 임포트합니다.
+# 2. 필수 라이브러리 임포트 (에러 방지를 위한 예외 처리 포함)
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import google.generativeai as genai
 from optbinning import OptimalBinning
-# sweetviz나 ydata_profiling에서 에러가 날 수 있으므로 예외 처리를 합니다.
+import streamlit.components.v1 as components
+
+# Sweetviz와 YData-Profiling은 내부적으로 pkg_resources를 많이 쓰므로 
+# 위에서 강제 로드한 뒤에 임포트해야 합니다.
 try:
     import sweetviz as sv
-except ImportError:
+except Exception as e:
+    st.error(f"Sweetviz 로드 실패: {e}")
     sv = None
+
 try:
     from ydata_profiling import ProfileReport
-except ImportError:
+except Exception as e:
+    st.error(f"YData-Profiling 로드 실패: {e}")
     ProfileReport = None
-
-import streamlit.components.v1 as components
 
 # 페이지 설정
 st.set_page_config(page_title="Awesome EDA - Telco Lifestyle", layout="wide")

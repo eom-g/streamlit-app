@@ -22,7 +22,7 @@ def get_gemini_insight(prompt, data_summary, user_api_key):
         return model.generate_content(full_prompt).text
     except Exception as e: return f"❌ AI 분석 실패: {e}"
 
-# --- 2. 드라마틱한 가상 데이터 생성 (차이를 극대화) ---
+# --- 2. 드라마틱한 가상 데이터 생성 (차이 극대화) ---
 @st.cache_data
 def load_data():
     np.random.seed(42)
@@ -42,7 +42,7 @@ def load_data():
     }
     df = pd.DataFrame(data)
     
-    # 세그먼트별 강력한 편향(Bias) 부여 - 분석 결과가 잘 나오도록 조정
+    # 세그먼트별 강력한 편향 부여 (분석 결과 풍부화)
     df.loc[df['약정유형'] == 'SIM-only', 'OTT_접속건수'] *= 5
     df.loc[df['약정유형'] == 'SIM-only', 'SNS_접속건수'] *= 3
     df.loc[df['단말유형'] == '아이폰', 'SNS_접속건수'] *= 4
@@ -70,7 +70,7 @@ def main():
         df_a = df[df[dim] == g_a].copy()
         df_b = df[df[dim] == g_b].copy()
         
-        # --- [1] IV 기반 Top 5 변수 선정 & OptBinning 상세 결과 ---
+        # --- [1] IV 기반 Top 5 변수 선정 ---
         st.header(f"📊 {g_a} vs {g_b} 핵심 차별점 랭킹")
         
         temp_a = df_a.copy(); temp_a['target'] = 0
@@ -83,49 +83,57 @@ def main():
 
         for col in features:
             try:
+                if combined[col].nunique() <= 1: continue # 값이 하나뿐이면 건너뜀
+                
                 dtype = "numerical" if combined[col].dtype != 'object' else "categorical"
                 optb = OptimalBinning(name=col, dtype=dtype, solver="cp")
                 optb.fit(combined[col].values, combined['target'].values)
                 bt = optb.binning_table.build()
-                iv = bt.loc["전체", "IV"]
-                iv_list.append({'feature': col, 'iv': iv})
-                binning_tables[col] = bt
+                
+                if 'IV' in bt.columns:
+                    iv = bt.loc["전체", "IV"]
+                    # IV가 유효한 숫자인 경우만 추가
+                    if pd.notnull(iv) and iv != np.inf:
+                        iv_list.append({'feature': col, 'iv': iv})
+                        binning_tables[col] = bt
             except: continue
         
-        top_5 = pd.DataFrame(iv_list).sort_values(by='iv', ascending=False).head(5)
-        
-        # 상위 5개 IV 메트릭 표시
-        m_cols = st.columns(5)
-        for i, row in enumerate(top_5.itertuples()):
-            m_cols[i].metric(f"{i+1}위: {row.feature}", f"{row.iv:.3f}", "IV Score")
-
-        # --- [2] 상위 변수별 하프 분포 차트 (Half-Graph) ---
-        st.divider()
-        st.header("📈 상위 변수 특성 비교 (Half-Density)")
-        
-        for feature in top_5['feature']:
-            st.subheader(f"📍 {feature} 변수 정밀 분석")
-            t1, t2 = st.columns([2, 1])
+        # IV 리스트가 비어있는지 확인 (에러 방지 핵심)
+        if not iv_list:
+            st.error("🧐 선택한 두 그룹 간에 유의미한 차이를 가진 변수를 찾지 못했습니다. 다른 그룹을 선택해보세요.")
+        else:
+            top_5 = pd.DataFrame(iv_list).sort_values(by='iv', ascending=False).head(5)
             
-            with t1:
-                # 하프 모양의 분포 그래프 (Density Plot)
-                fig = go.Figure()
-                fig.add_trace(go.Violin(x=df_a[feature], name=g_a, side='negative', line_color='blue'))
-                fig.add_trace(go.Violin(x=df_b[feature], name=g_b, side='positive', line_color='orange'))
-                fig.update_layout(violingap=0, violinmode='overlay', height=300, margin=dict(l=20, r=20, t=20, b=20))
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with t2:
-                # OptBinning 결과 테이블 요약
-                st.caption(f"{feature}의 구간별 비중 및 WoE")
-                st.dataframe(binning_tables[feature][['Bin', 'Count', 'Event', 'WoE', 'IV']].head(5), use_container_width=True)
+            # 상위 5개 IV 메트릭 표시
+            m_cols = st.columns(len(top_5))
+            for i, row in enumerate(top_5.itertuples()):
+                m_cols[i].metric(f"{i+1}위: {row.feature}", f"{row.iv:.3f}", "IV Score")
 
-        # --- [3] AI 인사이트 요약 ---
-        st.divider()
-        st.header("📝 AI 전략 마케팅 제언")
-        analysis_summary = f"상위 5개 변수: {list(top_5['feature'])}, 각 IV 점수: {list(top_5['iv'].round(3))}"
-        insight = get_gemini_insight(f"{g_a}와 {g_b} 세그먼트 차이 분석", analysis_summary, user_api_key)
-        st.info(insight)
+            # --- [2] 상위 변수별 하프 분포 차트 (Half-Graph) ---
+            st.divider()
+            st.header("📈 상위 변수 특성 비교 (Half-Density)")
+            
+            for feature in top_5['feature']:
+                st.subheader(f"📍 {feature} 변수 정밀 분석")
+                t1, t2 = st.columns([2, 1])
+                
+                with t1:
+                    fig = go.Figure()
+                    fig.add_trace(go.Violin(x=df_a[feature], name=g_a, side='negative', line_color='blue'))
+                    fig.add_trace(go.Violin(x=df_b[feature], name=g_b, side='positive', line_color='orange'))
+                    fig.update_layout(violingap=0, violinmode='overlay', height=300, margin=dict(l=20, r=20, t=20, b=20))
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with t2:
+                    st.caption(f"{feature}의 구간별 비중 및 WoE")
+                    st.dataframe(binning_tables[feature][['Bin', 'Count', 'Event', 'WoE', 'IV']].head(5), use_container_width=True)
+
+            # --- [3] AI 인사이트 요약 ---
+            st.divider()
+            st.header("📝 AI 전략 마케팅 제언")
+            analysis_summary = f"상위 차이 변수: {list(top_5['feature'])}, IV 점수: {list(top_5['iv'].round(3))}"
+            insight = get_gemini_insight(f"{g_a}와 {g_b} 세그먼트 차이 분석", analysis_summary, user_api_key)
+            st.info(insight)
 
         # --- [4] Sweetviz 리포트 (전체 탐색용) ---
         st.divider()

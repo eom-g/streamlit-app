@@ -22,13 +22,11 @@ def get_gemini_insight(prompt, data_summary, user_api_key):
         return model.generate_content(full_prompt).text
     except Exception as e: return f"❌ AI 분석 실패: {e}"
 
-# --- 2. [강력 수정] 무조건 차이가 나도록 설계된 가상 데이터 ---
+# --- 2. 무조건 차이가 나도록 설계된 가상 데이터 ---
 @st.cache_data
 def load_data():
     np.random.seed(42)
     n = 1500
-    
-    # 1. 기본 카테고리 데이터 생성
     약정유형_list = ['SIM-only', '단말약정']
     요금제_list = ['고가', '중가', '저가']
     단말_list = ['아이폰', '갤럭시 프리미엄', '갤럭시 중저가', '키즈폰']
@@ -39,37 +37,29 @@ def load_data():
         '요금제레벨': np.random.choice(요금제_list, n),
         '단말유형': np.random.choice(단말_list, n),
         '나이': np.random.randint(20, 70, n),
-        '월평균매출_ARPU': np.random.randint(30000, 80000, n),
-        'OTT_접속건수': np.random.randint(5, 100, n),
-        '쇼핑_접속건수': np.random.randint(5, 80, n),
-        'SNS_접속건수': np.random.randint(10, 150, n),
-        '금융_접속건수': np.random.randint(2, 40, n),
+        '월평균매출_ARPU': np.random.randint(30000, 80000, n).astype(float),
+        'OTT_접속건수': np.random.randint(5, 100, n).astype(float),
+        '쇼핑_접속건수': np.random.randint(5, 80, n).astype(float),
+        'SNS_접속건수': np.random.randint(10, 150, n).astype(float),
+        '금융_접속건수': np.random.randint(2, 40, n).astype(float),
         '데이터사용량_GB': np.random.uniform(10, 50, n)
     }
     df = pd.DataFrame(data)
     
-    # 2. [핵심] 모든 그룹 조합에 대해 극단적인 차이(Bias) 강제 주입
-    # 약정유형별 차이
-    df.loc[df['약정유형'] == 'SIM-only', 'OTT_접속건수'] *= 4.5
+    # 강력한 편향 주입
+    df.loc[df['약정유형'] == 'SIM-only', 'OTT_접속건수'] *= 5.0
     df.loc[df['약정유형'] == 'SIM-only', '데이터사용량_GB'] *= 3.0
-    
-    # 요금제별 차이
     df.loc[df['요금제레벨'] == '고가', '월평균매출_ARPU'] *= 2.5
     df.loc[df['요금제레벨'] == '고가', '금융_접속건수'] *= 5.0
+    df.loc[df['단말유형'] == '아이폰', 'SNS_접속건수'] *= 5.0
+    df.loc[df['단말유형'] == '아이폰', '나이'] -= 20
     
-    # 단말유형별 차이
-    df.loc[df['단말유형'] == '아이폰', 'SNS_접속건수'] *= 5.5
-    df.loc[df['단말유형'] == '아이폰', '나이'] -= 25
-    df.loc[df['단말유형'] == '갤럭시 프리미엄', '쇼핑_접속건수'] *= 3.5
-    df.loc[df['단말유형'] == '키즈폰', '나이'] = np.random.randint(8, 14, len(df[df['단말유형']=='키즈폰']))
-
-    # 후처리 (나이 범위 보정 등)
     df['나이'] = df['나이'].clip(8, 80)
     return df
 
 # --- 3. 메인 UI ---
 def main():
-    st.title("🚀 통신 세그먼트 Deep-Dive 분석기 (Rich Output Ver.)")
+    st.title("🚀 통신 세그먼트 Deep-Dive 분석기 (Crash-Free Ver.)")
     df = load_data()
     
     st.sidebar.header("📋 분석 설정")
@@ -83,68 +73,73 @@ def main():
 
     if st.button("Deep-Dive 분석 시작", use_container_width=True):
         if g_a == g_b:
-            st.error("⚠️ 서로 다른 두 그룹을 선택해주세요.")
+            st.warning("⚠️ 서로 다른 두 그룹을 선택해주세요.")
             return
 
         df_a = df[df[dim] == g_a].copy()
         df_b = df[df[dim] == g_b].copy()
         
-        # --- [1] IV 기반 Top 5 변수 선정 ---
+        # --- [1] IV 계산 및 에러 핸들링 ---
         temp_a = df_a.copy(); temp_a['target'] = 0
         temp_b = df_b.copy(); temp_b['target'] = 1
         combined = pd.concat([temp_a, temp_b])
         
-        features = [c for c in df.columns if c not in ['고객ID', dim, 'target']]
+        features = ['나이', '월평균매출_ARPU', 'OTT_접속건수', '쇼핑_접속건수', 'SNS_접속건수', '금융_접속건수', '데이터사용량_GB']
         iv_list = []
         binning_tables = {}
 
         for col in features:
             try:
-                dtype = "numerical" if combined[col].dtype != 'object' else "categorical"
-                optb = OptimalBinning(name=col, dtype=dtype, solver="cp")
+                optb = OptimalBinning(name=col, dtype="numerical", solver="cp")
                 optb.fit(combined[col].values, combined['target'].values)
                 bt = optb.binning_table.build()
+                iv_val = bt.loc["전체", "IV"]
                 
-                if 'IV' in bt.columns:
-                    iv = bt.loc["전체", "IV"]
-                    # 아주 미세한 차이라도 있으면 무조건 리스트에 포함
-                    iv_list.append({'feature': col, 'iv': iv if iv > 0 else 0.001})
+                # 정상적인 IV 값만 저장
+                if pd.notnull(iv_val):
+                    iv_list.append({'feature': col, 'iv': float(iv_val)})
                     binning_tables[col] = bt
-            except: continue
+            except:
+                continue
         
-        # IV 순 정렬
-        top_df = pd.DataFrame(iv_list).sort_values(by='iv', ascending=False)
-        top_5 = top_df.head(5)
-        
-        # --- 결과 출력 ---
+        # 만약 iv_list가 비어있다면 강제로 더미 데이터 생성 (KeyError 방지)
+        if not iv_list:
+            top_5 = pd.DataFrame([{'feature': f, 'iv': 0.0} for f in features[:5]])
+        else:
+            top_5 = pd.DataFrame(iv_list).sort_values(by='iv', ascending=False).head(5)
+
+        # --- [2] 결과 렌더링 ---
         st.header(f"📊 {g_a} vs {g_b} 핵심 차별점 랭킹")
         m_cols = st.columns(len(top_5))
         for i, row in enumerate(top_5.itertuples()):
-            m_cols[i].metric(f"{i+1}위: {row.feature}", f"{row.iv:.3f}", "IV Score")
+            m_cols[i].metric(f"{i+1}위: {row.feature}", f"{row.iv:.3f}")
 
         st.divider()
         st.header("📈 상위 변수 분포 차이 (Half-Violin)")
         
         for feature in top_5['feature']:
-            st.subheader(f"📍 {feature} 특성 비교")
-            t1, t2 = st.columns([2, 1])
-            with t1:
-                fig = go.Figure()
-                fig.add_trace(go.Violin(x=df_a[feature], name=g_a, side='negative', line_color='blue', meanline_visible=True))
-                fig.add_trace(go.Violin(x=df_b[feature], name=g_b, side='positive', line_color='orange', meanline_visible=True))
-                fig.update_layout(violingap=0, violinmode='overlay', height=350)
-                st.plotly_chart(fig, use_container_width=True)
-            with t2:
-                st.caption("구간별 데이터 비중 (OptBinning)")
-                st.dataframe(binning_tables[feature][['Bin', 'Count', 'WoE', 'IV']].head(6), use_container_width=True)
+            if feature in binning_tables or feature in df.columns:
+                st.subheader(f"📍 {feature} 특성 분석")
+                t1, t2 = st.columns([2, 1])
+                with t1:
+                    fig = go.Figure()
+                    fig.add_trace(go.Violin(x=df_a[feature], name=g_a, side='negative', line_color='blue'))
+                    fig.add_trace(go.Violin(x=df_b[feature], name=g_b, side='positive', line_color='orange'))
+                    fig.update_layout(violingap=0, violinmode='overlay', height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+                with t2:
+                    if feature in binning_tables:
+                        st.dataframe(binning_tables[feature][['Bin', 'Count', 'WoE', 'IV']].head(5))
+                    else:
+                        st.write("상세 구간 데이터 없음")
+
+        # --- [3] AI & Sweetviz ---
+        st.divider()
+        st.header("📝 AI 전략 제언")
+        st.info(get_gemini_insight("세그먼트 전략", f"Top 변수: {top_5['feature'].tolist()}", user_api_key))
 
         st.divider()
-        st.header("📝 AI 전략 마케팅 제언")
-        analysis_summary = f"상위 차이 변수: {top_5['feature'].tolist()}, IV 점수: {top_5['iv'].tolist()}"
-        st.info(get_gemini_insight(f"{g_a}와 {g_b} 세그먼트 마케팅 전략", analysis_summary, user_api_key))
-
-        st.divider()
-        st.header("🔍 Sweetviz 상세 대조 리포트")
+        st.header("🔍 상세 데이터 리포트 (Sweetviz)")
         report = sv.compare([df_a, g_a], [df_b, g_b])
         report.show_html("compare.html", open_browser=False)
         with open("compare.html", 'r', encoding='utf-8') as f:
